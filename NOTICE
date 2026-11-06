@@ -1,0 +1,17 @@
+Anon Desktop Pet is an unofficial fan-made desktop companion.
+
+Chihaya Anon (千早愛音), MyGO!!!!!, BanG Dream!, and related character designs
+and trademarks belong to their respective rights holders. This project is
+not affiliated with, sponsored by, or endorsed by the rights holders.
+
+The character atlas is newly AI-generated fan artwork, not extracted from
+an official game or the user's desktop wallpaper. The MIT license applies
+to the application code and original UI graphics, not to underlying third-
+party characters or trademarks, and grants no rights in those properties.
+
+Dialogue is original fan-written text, not recorded official voice lines.
+Optional musical feedback consists of synthesized short notes, not a song
+recording. No voice model, music download, or network API is bundled.
+
+Electron and its bundled components retain their own licenses; see the
+LICENSE.electron.txt and LICENSES.chromium.html included with the runtime.

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.test-data/
+test-results/
+.local-tools/
+*.log

@@ -1,0 +1,11 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'"><title>爱音桌宠</title><link rel="stylesheet" href="pet.css"></head><body>
+<main id="companion" aria-label="千早爱音桌宠">
+  <div id="speech" role="status" aria-live="polite"></div>
+  <div id="timer" hidden></div>
+  <button id="more" title="互动菜单" aria-label="打开互动菜单" aria-expanded="false">···</button>
+  <nav id="dock" aria-label="陪爱音玩" hidden>
+    <button data-action="pat" title="摸摸头">♡</button><button data-action="feed" title="喂点心">🍪</button><button data-action="guitar" title="弹吉他">♫</button><button data-action="sleep" title="休息 / 叫醒">☾</button><button id="room" title="爱音的小房间">⚙</button>
+  </nav>
+  <canvas id="sprite" width="256" height="256" tabindex="0" role="button" aria-label="爱音：点击互动，拖动抱起，右键打开菜单"></canvas>
+  <div id="particles" aria-hidden="true"></div>
+</main><script src="art.js"></script><script src="pet.js"></script></body></html>

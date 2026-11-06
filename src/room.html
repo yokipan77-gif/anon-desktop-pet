@@ -1,0 +1,31 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'"><title>爱音的小房间</title><link rel="stylesheet" href="room.css"></head><body>
+<header class="titlebar"><span class="mark">a<span>n</span>on<span class="star">✧</span></span><span class="titlebar-label">DESKTOP COMPANION</span></header>
+<main>
+  <div class="intro"><div><p class="eyebrow">MY LITTLE EVERYDAY / 01</p><h1>今天，也一起吧<span>。</span></h1><p class="subtitle">千早爱音的桌边日常 <span>·</span> 迷路也没关系。</p></div><span class="offline"><i></i> 本地陪伴 · 无需联网</span></div>
+  <div class="layout">
+    <section class="stage" aria-label="爱音的房间">
+      <div class="stage-top"><span class="pill">CHIHAYA ANON</span><span id="state-label">待机中</span></div>
+      <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="star decor-one">✧</span><span class="star decor-two">✦</span><span class="little-note">♪</span>
+      <div class="stage-quote" id="room-speech" role="status" aria-live="polite">你忙你的，我在这里。</div>
+      <canvas id="preview" width="512" height="512" role="button" tabindex="0" aria-label="点击摸摸爱音的头"></canvas>
+      <div class="ground"></div>
+      <div class="stage-bottom"><span>ANON'S LITTLE ROOM</span><span>♡ <b id="pat-count">0</b> 次摸摸头</span></div>
+    </section>
+    <aside>
+      <section class="care"><div class="section-title"><h2>爱音今天怎么样</h2><span class="small-tag">JUST FOR YOU</span></div><div class="meters">
+        <label><span>♡ 好感度</span><meter id="affection" min="0" max="100"></meter><output id="affection-number"></output></label>
+        <label><span>☀ 精神</span><meter id="energy" min="0" max="100"></meter><output id="energy-number"></output></label>
+        <label><span>♧ 饱腹感</span><meter id="hunger" min="0" max="100"></meter><output id="hunger-number"></output></label>
+      </div></section>
+      <section class="play"><div class="section-title"><h2>陪她玩一会儿</h2><span class="small-tag">LITTLE MOMENTS</span></div><div class="actions">
+        <button data-action="pat"><span>♡</span>摸摸头<small>会害羞哦</small></button><button data-action="feed"><span>♧</span>喂点心<small>补充一点能量</small></button><button data-action="guitar"><span>♫</span>弹吉他<small>专属练习时间</small></button><button data-action="follow"><span>➝</span>跟着我<small>追着光标跑</small></button><button data-action="talk"><span>☏</span>说句话<small>听她碎碎念</small></button><button data-action="sleep" id="sleep-action"><span>☾</span><b>休息一下</b><small>一起慢下来</small></button>
+      </div></section>
+      <section class="focus"><div><p class="eyebrow">STAY WITH ME</p><h2>一起专心一小会儿</h2><p id="focus-description">我会安静待着，结束时叫你。</p></div><div class="focus-controls"><select id="focus-duration" aria-label="专注时长"><option value="25">25 分钟</option><option value="45">45 分钟</option><option value="5">5 分钟</option></select><button id="focus-start">开始陪伴 <span>↗</span></button><button id="focus-stop" hidden>结束</button></div></section>
+    </aside>
+  </div>
+  <section class="preferences"><div class="section-title"><h2>按你的节奏相处</h2><button class="text-button" id="home">找回爱音 ↗</button></div>
+    <div class="preferences-grid"><label class="size-control"><span>桌宠大小</span><input id="size" type="range" min="0.75" max="1.35" step="0.05"><output id="size-value">100%</output></label>
+    <label class="toggle"><span>自由散步</span><input type="checkbox" id="roam"><i></i></label><label class="toggle"><span>偶尔碎碎念</span><input type="checkbox" id="chatter"><i></i></label><label class="toggle"><span>轻柔提示音</span><input type="checkbox" id="sound"><i></i></label><label class="toggle"><span>始终在最上层</span><input type="checkbox" id="topmost"><i></i></label><label class="toggle"><span>减少动态效果</span><input type="checkbox" id="reducedMotion"><i></i></label></div>
+  </section>
+  <footer><span>点击摸头 · 拖动抱起 · 右键更多 · 托盘双击回到这里</span><span>UNOFFICIAL FAN COMPANION <span class="footer-heart">♡</span> v1.0.0</span></footer>
+</main><script src="art.js"></script><script src="room.js"></script></body></html>
