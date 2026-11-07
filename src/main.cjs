@@ -3,12 +3,14 @@ const { app, BrowserWindow, ipcMain, Menu, Tray, screen, nativeImage, Notificati
 const fs = require('node:fs');
 const path = require('node:path');
 const { normalize, constrain, physics, Companion, clamp } = require('./core.cjs');
+const { applyPetBounds } = require('./window-bounds.cjs');
 const testMode = process.argv.includes('--smoke-test');
 if (testMode) app.setPath('userData', path.join(app.getPath('temp'), 'anon-desktop-pet-test', String(process.pid)));
 app.setAppUserModelId('io.github.yokipan77.anonpet');
 let pet, room, tray, model, savePath, timer, lastTime, drag, flight, point, lastSent = '', lastSave = 0, hidden = false, suspended = false;
 const PET_BASE_SIZE = 240;
 let ignored = true, size = { width: PET_BASE_SIZE, height: PET_BASE_SIZE };
+let lastPlacement = '', lastBoundsCheck = 0;
 const single = app.requestSingleInstanceLock();
 if (!single) app.quit();
 else {
@@ -32,7 +34,18 @@ function save() {
   } catch (error) { console.error('Unable to save companion settings:', error.message); }
 }
 function areaAt(p) { return screen.getDisplayNearestPoint({ x: Math.round(p.x + size.width / 2), y: Math.round(p.y + size.height / 2) }).workArea; }
-function place() { if (pet && !pet.isDestroyed()) pet.setPosition(Math.round(point.x), Math.round(point.y), false); }
+function place(force = false) {
+  if (!pet || pet.isDestroyed()) return;
+  const key = `${Math.round(point.x)},${Math.round(point.y)},${size.width},${size.height}`;
+  if (!force && key === lastPlacement) return;
+  point = applyPetBounds(pet, point, size, areaAt(point));
+  lastPlacement = `${Math.round(point.x)},${Math.round(point.y)},${size.width},${size.height}`;
+}
+function recoverPosition() {
+  drag = null; flight = null;
+  if (model.state === 'held') model.act('drop');
+  point = constrain(point, areaAt(point), size); place(true); save();
+}
 function home() {
   drag = null; flight = null;
   const a = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
@@ -59,6 +72,7 @@ function menu() {
     { label: '一起摇摆 ♪', click: () => model.act('dance') }, { label: '跳一下！', click: () => model.act('jump') },
     { label: '伸个懒腰', click: () => model.act('stretch') },
     { label: model.state === 'sleep' ? '叫醒爱音' : '休息一下', click: () => model.act(model.state === 'sleep' ? 'wake' : 'sleep') },
+    { label: '固定位置（拖动后停在原处）', type: 'checkbox', checked: model.settings.pinned, click: item => { model.settings = normalize({ ...model.settings, pinned: item.checked }); flight = null; if (['walk','follow'].includes(model.state)) model.setState('idle', 8000, Date.now()); save(); broadcast(true); } },
     { label: '回到屏幕角落', click: home }, { label: hidden ? '显示桌宠' : '暂时隐藏', click: () => { if (hidden) showPet(); else { hidden = true; pet.hide(); } } },
     { type: 'separator' }, { label: '退出爱音桌宠', click: () => app.quit() }
   ]).popup();
@@ -72,10 +86,10 @@ async function boot() {
   savePath = path.join(app.getPath('userData'), 'companion.json');
   let saved = {}; try { saved = JSON.parse(fs.readFileSync(savePath, 'utf8')); } catch {}
   model = new Companion(saved); size = { width: Math.round(PET_BASE_SIZE * model.settings.size), height: Math.round(PET_BASE_SIZE * model.settings.size) };
-  const a = screen.getPrimaryDisplay().workArea;
+  const a = Number.isFinite(saved.x) && Number.isFinite(saved.y) ? areaAt({ x: saved.x, y: saved.y }) : screen.getPrimaryDisplay().workArea;
   point = constrain({ x: model.settings.x ?? a.x + a.width - size.width - 40, y: model.settings.y ?? a.y + a.height - size.height }, a, size);
   pet = new BrowserWindow({ ...size, minWidth: 1, minHeight: 1, x: Math.round(point.x), y: Math.round(point.y), transparent: true, backgroundColor: '#00000000', frame: false, thickFrame: false, hasShadow: false, resizable: false, maximizable: false, minimizable: false, skipTaskbar: true, alwaysOnTop: model.settings.topmost, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: true } });
-  secure(pet); pet.setIgnoreMouseEvents(true, { forward: true }); pet.setAlwaysOnTop(model.settings.topmost, 'floating');
+  secure(pet); place(true); pet.setIgnoreMouseEvents(true, { forward: true }); pet.setAlwaysOnTop(model.settings.topmost, 'floating');
   pet.loadFile(path.join(__dirname, 'pet.html')); pet.once('ready-to-show', () => { pet.showInactive(); model.say(saved.savedAt ? '你回来啦！今天，也一起吧 ♪' : '初次见面！我是爱音。右键点我，来玩吧 ♪', Date.now()); broadcast(true); });
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '../assets/icon.png')).resize({ width: 24, height: 24 }));
   tray.setToolTip('爱音桌宠 · 双击打开小房间'); tray.on('double-click', () => { showPet(); openRoom(); }); tray.on('right-click', menu); tray.on('click', showPet);
@@ -86,18 +100,17 @@ async function boot() {
   channel('anon:focus', (_, minutes) => { model.focus(minutes); broadcast(true); });
   channel('anon:settings', (_, patch) => {
     if (!patch || typeof patch !== 'object') return;
-    const allowed = {}; for (const key of ['size','roam','chatter','sound','topmost','reducedMotion','trackCursor','quality']) if (Object.hasOwn(patch, key)) allowed[key] = patch[key];
+    const allowed = {}; for (const key of ['size','pinned','roam','chatter','sound','topmost','reducedMotion','trackCursor','quality']) if (Object.hasOwn(patch, key)) allowed[key] = patch[key];
     model.settings = normalize({ ...model.settings, ...allowed });
     syncTopmost();
     const next = { width: Math.round(PET_BASE_SIZE * model.settings.size), height: Math.round(PET_BASE_SIZE * model.settings.size) };
     if (next.width !== size.width) {
-      const bottom = point.y + size.height; size = next; point.y = bottom - size.height;
-      // Windows locks a non-resizable window's minimum to its previous size.
-      pet.setMinimumSize(1, 1); pet.setMaximumSize(0, 0);
-      pet.setSize(size.width, size.height);
-      point = constrain(point, areaAt(point), size); place();
+      const bottom = point.y + size.height, center = point.x + size.width / 2;
+      size = next; point = { x: center - size.width / 2, y: bottom - size.height };
+      place(true);
     }
-    if ((!model.settings.roam || model.settings.reducedMotion) && model.state === 'walk') model.setState('idle', 8000, Date.now());
+    if (model.settings.pinned || model.settings.reducedMotion) flight = null;
+    if ((model.settings.pinned || model.settings.reducedMotion || !model.settings.roam && model.state === 'walk') && ['walk','follow'].includes(model.state)) model.setState('idle', 8000, Date.now());
     save(); broadcast(true);
   });
   channel('anon:hit', (event, hit) => {
@@ -110,12 +123,13 @@ async function boot() {
       const c = screen.getCursorScreenPoint(); drag = { dx: c.x - point.x, dy: c.y - point.y, vx: 0, vy: 0 }; flight = null;
       ignored = false; pet.setIgnoreMouseEvents(false); model.act('drag');
     } else if (!active && drag) {
-      flight = { vx: clamp(drag.vx, -1500, 1500), vy: clamp(drag.vy, -1300, 1300) }; drag = null; model.act('drop');
+      flight = model.settings.pinned || model.settings.reducedMotion ? null : { vx: clamp(drag.vx, -1500, 1500), vy: clamp(drag.vy, -1300, 1300) };
+      drag = null; model.act('drop'); place(); save();
     }
     broadcast(true);
   });
-  screen.on('display-removed', home); screen.on('display-metrics-changed', () => { point = constrain(point, areaAt(point), size); place(); });
-  powerMonitor.on('suspend', () => { suspended = true; }); powerMonitor.on('resume', () => { suspended = false; lastTime = Date.now(); });
+  screen.on('display-removed', recoverPosition); screen.on('display-metrics-changed', recoverPosition);
+  powerMonitor.on('suspend', () => { suspended = true; }); powerMonitor.on('resume', () => { suspended = false; lastTime = Date.now(); recoverPosition(); });
   lastTime = Date.now(); timer = setInterval(tick, 1000 / 30);
   if (!saved.savedAt && !testMode) openRoom();
 }
@@ -128,9 +142,9 @@ function tick() {
       const c = screen.getCursorScreenPoint(); const a = screen.getDisplayNearestPoint(c).workArea;
       const next = constrain({ x: c.x - drag.dx, y: c.y - drag.dy }, a, size);
       drag.vx = (next.x - point.x) / dt * .45 + drag.vx * .55; drag.vy = (next.y - point.y) / dt * .45 + drag.vy * .55; point = next; place();
-    } else if (flight) {
+    } else if (flight && !model.settings.pinned) {
       const next = physics({ ...point, ...flight }, areaAt(point), size, dt); point = { x: next.x, y: next.y }; flight = next.settled ? null : { vx: next.vx, vy: next.vy }; place();
-    } else if (['walk', 'follow'].includes(model.state) && !model.settings.reducedMotion) {
+    } else if (['walk', 'follow'].includes(model.state) && !model.settings.reducedMotion && !model.settings.pinned) {
       const a = areaAt(point); let speed = model.state === 'follow' ? 100 : 38;
       if (model.state === 'follow') {
         const c = screen.getCursorScreenPoint(); const delta = c.x - (point.x + size.width / 2); model.direction = delta < 0 ? -1 : 1;
@@ -140,6 +154,11 @@ function tick() {
       if (Math.abs(next.x - point.x) < .01 && speed) model.direction *= -1;
       point = next; place();
     }
+  }
+  if (!hidden && now - lastBoundsCheck > 1000) {
+    lastBoundsCheck = now;
+    const bounds = pet.getBounds(), safe = constrain(bounds, areaAt(bounds), bounds);
+    if (Math.abs(bounds.width - size.width) > 2 || Math.abs(bounds.height - size.height) > 2 || bounds.x !== safe.x || bounds.y !== safe.y) place(true);
   }
   if (now - lastSave > 15000) { save(); lastSave = now; }
   // Cursor samples stay local; the renderer smooths these low-rate updates.

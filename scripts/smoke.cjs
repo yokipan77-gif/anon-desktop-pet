@@ -45,7 +45,8 @@ const assert=require('node:assert/strict');const path=require('node:path');const
     await room.evaluate(()=>window.scrollTo(0,0));await room.screenshot({path:path.join(root,'docs/room.png'),fullPage:true});
     await room.locator('.stage').evaluate(el=>el.style.background='#172236');await room.locator('.stage').screenshot({path:path.join(root,'test-results/dark-art.png')});await room.locator('.stage').evaluate(el=>el.style.background='');
     await pet.screenshot({path:path.join(root,'docs/pet.png'),omitBackground:true});
-    await room.locator('[data-action="follow"]').click();assert.equal((await pet.evaluate(()=>window.anon.get())).state,'follow');
+    await room.locator('#pinned').uncheck();await room.locator('[data-action="follow"]').click();assert.equal((await pet.evaluate(()=>window.anon.get())).state,'follow');
+    await room.locator('#pinned').check();await pet.waitForFunction(()=>document.body.dataset.state==='idle');
     await pet.evaluate(()=>window.anon.settings({reducedMotion:true}));assert.equal((await pet.evaluate(()=>window.anon.get())).settings.reducedMotion,true);
     assert.deepEqual(errors,[]);
     settingsPath=await app.evaluate(({app})=>app.getPath('userData'));

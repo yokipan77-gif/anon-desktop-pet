@@ -1,11 +1,12 @@
 'use strict';
 
-const defaults = Object.freeze({ size: 1, roam: true, chatter: true, sound: false, topmost: true, reducedMotion: false, trackCursor: true, quality: 'balanced', affection: 20, hunger: 75, energy: 90, pats: 0, focusMinutes: 0, savedAt: 0 });
+const defaults = Object.freeze({ size: 1, pinned: true, roam: false, chatter: true, sound: false, topmost: true, reducedMotion: false, trackCursor: true, quality: 'balanced', affection: 20, hunger: 75, energy: 90, pats: 0, focusMinutes: 0, savedAt: 0 });
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 function normalize(input = {}) {
   const out = { ...defaults };
   if (!input || typeof input !== 'object') return out;
-  for (const k of ['roam', 'chatter', 'sound', 'topmost', 'reducedMotion', 'trackCursor']) if (typeof input[k] === 'boolean') out[k] = input[k];
+  for (const k of ['pinned', 'roam', 'chatter', 'sound', 'topmost', 'reducedMotion', 'trackCursor']) if (typeof input[k] === 'boolean') out[k] = input[k];
+  if (out.pinned) out.roam = false;
   if (['balanced','battery'].includes(input.quality)) out.quality=input.quality;
   for (const [k, lo, hi] of [['size', .6, 1.35], ['affection', 0, 100], ['hunger', 0, 100], ['energy', 0, 100], ['pats', 0, 1e8], ['focusMinutes', 0, 1e8], ['savedAt', 0, 1e15]]) {
     if (Number.isFinite(input[k])) out[k] = clamp(input[k], lo, hi);
@@ -58,6 +59,7 @@ class Companion {
     } else if (action === 'guitar') {
       this.setState('guitar', 14000, now); this.say('接下来，是爱音的练习时间！', now);
     } else if (action === 'follow') {
+      if (this.settings.pinned) { this.say('我就在这里陪你。关闭“固定位置”后，就能跟着你跑啦。', now); return false; }
       this.setState('follow', 18000, now); this.say('等一下！我也要去那边！', now);
     } else {
       this.setState('happy', 2600, now);
@@ -89,7 +91,7 @@ class Companion {
       if (this.state !== 'idle') this.setState('idle', 7000 + this.random() * 11000, now);
       else if (this.settings.energy < 15) this.setState('sleep', Infinity, now);
       else if (this.focusEnd || this.settings.reducedMotion) this.setState('idle', 15000, now);
-      else if (roll < .5 && this.settings.roam) {
+      else if (roll < .5 && this.settings.roam && !this.settings.pinned) {
         this.direction = this.random() < .5 ? -1 : 1; this.setState('walk', 3000 + this.random() * 4000, now);
       } else if (roll < .72) this.setState('guitar', 8000, now);
       else if (this.settings.chatter) this.act('talk', now);
