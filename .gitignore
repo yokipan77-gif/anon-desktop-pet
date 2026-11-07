@@ -4,3 +4,7 @@ dist/
 test-results/
 .local-tools/
 *.log
+chat-config.json
+chat-memory.json
+.env
+.env.*

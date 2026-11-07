@@ -1,8 +1,8 @@
 {
   "name": "anon-desktop-pet",
   "productName": "Anon Desktop Pet",
-  "version": "2.0.0",
-  "description": "千早爱音的桌边日常 — an expressive, offline Windows desktop companion",
+  "version": "3.0.0",
+  "description": "千早爱音的桌边日常 — Windows companion with optional DeepSeek/Ollama chat and local memory",
   "author": "yokipan77-gif",
   "license": "MIT",
   "main": "src/main.cjs",
@@ -16,6 +16,7 @@
     "test:app": "node scripts/smoke.cjs",
     "test:art": "node scripts/art-check.cjs",
     "test:windows": "node scripts/window-check.cjs",
+    "test:chat": "node scripts/chat-smoke.cjs",
     "dist": "electron-builder --win nsis portable --x64 --publish never"
   },
   "devDependencies": {

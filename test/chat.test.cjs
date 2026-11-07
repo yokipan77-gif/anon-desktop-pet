@@ -1,0 +1,28 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
+const {ChatService,localUrl,memoryFor,contextFor}=require('../src/chat.cjs');
+// Test-only reversible vault. Actual encryption is checked through Electron safeStorage in chat-smoke.
+const vault={isEncryptionAvailable:()=>true,encryptString:s=>Buffer.from([...Buffer.from(s)].map(b=>b^91)),decryptString:b=>Buffer.from([...b].map(v=>v^91)).toString()};
+function fixture(t,options={}){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'anon-chat-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));return{dir,chat:new ChatService(dir,{vault,...options})};}
+const response=data=>new Response(JSON.stringify(data),{status:200});
+test('DeepSeek sends bounded context and only stores an encrypted key',async t=>{
+  const calls=[];const {chat,dir}=fixture(t,{request:async(url,options)=>{calls.push({url,options});return response({choices:[{message:{content:'当然记得，你叫小悠。'}}]});}});
+  chat.configure({apiKey:'sk-unit-test-only'});chat.setNotes('称呼我小悠。');await chat.send('你好');await chat.send('我叫什么？');
+  const body=JSON.parse(calls[1].options.body);assert.equal(calls[1].url,'https://api.deepseek.com/chat/completions');assert.equal(calls[1].options.headers.Authorization,'Bearer sk-unit-test-only');assert.equal(body.thinking.type,'disabled');assert.match(body.messages[0].content,/小悠/);assert.deepEqual(body.messages.slice(1).map(m=>m.role),['user','assistant','user']);
+  assert.ok(!fs.readFileSync(path.join(dir,'chat-config.json'),'utf8').includes('sk-unit-test-only'));assert.equal(chat.snapshot().config.apiKey,undefined);assert.equal(chat.snapshot().config.encryptedKey,undefined);
+  const restarted=new ChatService(dir,{vault});assert.equal(restarted.snapshot().messages.length,4);assert.equal(restarted.snapshot().notes,'称呼我小悠。');assert.equal(restarted.key(),'sk-unit-test-only');
+});
+test('Ollama requests remain local, carry no cloud credential, and disable supported thinking',async t=>{
+  const calls=[];const {chat}=fixture(t,{request:async(url,options)=>{calls.push({url,options});return response(url.endsWith('/show')?{capabilities:['completion','thinking']}:{message:{content:'我在这里。'}});}});
+  chat.configure({provider:'ollama',apiKey:'sk-unit-test-only',ollamaModel:'local-chat'});await chat.send('在吗');
+  const request=calls.find(c=>c.url.endsWith('/chat'));assert.equal(request.url,'http://127.0.0.1:11434/api/chat');assert.equal(request.options.headers.Authorization,undefined);assert.equal(JSON.parse(request.options.body).think,false);
+  assert.throws(()=>localUrl('http://example.com:11434'),/本机/);assert.throws(()=>localUrl('http://user:pass@localhost:11434'),/本机/);
+});
+test('embedding-only Ollama models produce an actionable error without polluting history',async t=>{const {chat}=fixture(t,{request:async()=>response({capabilities:['embedding']})});chat.configure({provider:'ollama',ollamaModel:'bge-m3'});await assert.rejects(chat.send('你好'),/嵌入/);assert.equal(chat.snapshot().messages.length,0);assert.equal(chat.busy,false);});
+test('cancellation releases the lock and preserves the previous conversation',async t=>{
+  const {chat}=fixture(t,{request:(_,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError'))))});chat.configure({apiKey:'sk-unit-test-only'});
+  const pending=chat.send('这一句取消');assert.equal(chat.busy,true);await assert.rejects(chat.send('重复'),/等待或取消/);assert.throws(()=>chat.setNotes('race'),/等待或取消/);chat.cancel();await assert.rejects(pending,/取消/);assert.equal(chat.busy,false);assert.deepEqual(chat.snapshot().messages,[]);
+});
+test('API errors do not expose the response body or key, and do not save failed turns',async t=>{const {chat}=fixture(t,{request:async()=>new Response('sk-unit-test-only',{status:401})});chat.configure({apiKey:'sk-unit-test-only'});await assert.rejects(chat.send('你好'),e=>/Key 无效/.test(e.message)&&!e.message.includes('sk-unit-test'));assert.equal(chat.snapshot().messages.length,0);assert.equal(chat.busy,false);});
+test('clearing recent history keeps fixed notes, clearing all forgets both, removing key retains settings',async t=>{const {chat}=fixture(t,{request:async()=>response({choices:[{message:{content:'好的'}}]})});chat.configure({apiKey:'sk-unit-test-only'});chat.setNotes('我喜欢粉色');await chat.send('你好');chat.clear('history');assert.equal(chat.snapshot().notes,'我喜欢粉色');assert.equal(chat.snapshot().messages.length,0);chat.clear('all');assert.equal(chat.snapshot().notes,'');chat.configure({removeKey:true});assert.equal(chat.snapshot().config.hasKey,false);await assert.rejects(chat.send('你好'),/填写并保存/);});
+test('memory retains at most 100 complete rounds and context stays bounded',()=>{const messages=[];for(let i=0;i<110;i++)messages.push({role:'user',content:'问'+i},{role:'assistant',content:'答'.repeat(1000)});const memory=memoryFor({notes:'长期记忆',messages});assert.equal(memory.messages.length,200);assert.equal(memory.messages[0].content,'问10');const context=contextFor(memory,'最后一个问题','ollama');assert.ok(context.reduce((n,m)=>n+m.content.length,0)<=5000);assert.equal(context[0].role,'system');assert.equal(context.at(-1).role,'user');assert.deepEqual(memoryFor(null),{notes:'',messages:[]});});
+test('key persistence fails closed when OS encryption is unavailable',t=>{const {chat,dir}=fixture(t,{vault:{isEncryptionAvailable:()=>false}});assert.throws(()=>chat.configure({apiKey:'sk-unit-test-only'}),/加密/);assert.equal(fs.existsSync(path.join(dir,'chat-config.json')),false);});

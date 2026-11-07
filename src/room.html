@@ -1,8 +1,27 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'"><title>爱音的小房间</title><link rel="stylesheet" href="room.css"></head><body>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'"><title>爱音的小房间</title><link rel="stylesheet" href="room.css"><link rel="stylesheet" href="chat.css"></head><body>
 <header class="titlebar"><span class="mark">a<span>n</span>on<span class="star">✧</span></span><span class="titlebar-label">DESKTOP COMPANION</span></header>
 <main>
   <div class="intro"><div><p class="eyebrow">MY LITTLE EVERYDAY / 01</p><h1>今天，也一起吧<span>。</span></h1><p class="subtitle">千早爱音的桌边日常 <span>·</span> 迷路也没关系。</p></div><span class="offline"><i></i> 本地陪伴 · 无需联网</span></div>
-  <div class="layout">
+  <nav class="view-tabs" aria-label="小房间页面"><button id="companion-tab" aria-pressed="true">桌边陪伴</button><button id="chat-tab" aria-pressed="false">和爱音聊天 <span>3.0</span></button></nav>
+  <section id="chat-section" hidden>
+    <div class="chat-layout">
+      <section class="conversation"><div class="conversation-heading"><div><p class="eyebrow">A LITTLE CLOSER</p><h2>今天，想聊些什么？</h2></div><span id="chat-provider-label">尚未连接</span></div>
+        <div id="chat-log" role="log" aria-label="对话记录" aria-live="polite"></div>
+        <p id="chat-status" role="status">先在右侧设置连接，再来和我说说话吧。</p>
+        <form id="chat-form"><label for="chat-input" class="sr-only">给爱音的消息</label><textarea id="chat-input" maxlength="2000" rows="3" placeholder="爱音，我今天……（Enter 发送，Shift+Enter 换行）"></textarea><div class="composer-bottom"><span>对话自动保存在这台电脑</span><button type="button" id="chat-cancel" hidden>取消回复</button><button type="submit" id="chat-send">发送 ↗</button></div></form>
+      </section>
+      <aside class="chat-sidebar">
+        <section class="chat-card"><p class="eyebrow">LET'S CONNECT</p><h2>连接方式</h2><form id="connection-form">
+          <label>服务<select id="chat-provider"><option value="deepseek">DeepSeek API</option><option value="ollama">本机 Ollama</option></select></label>
+          <div id="deepseek-fields"><label>模型名<input id="deepseek-model" maxlength="160" placeholder="deepseek-flash" required></label><label>API Key<input id="api-key" type="password" autocomplete="off" spellcheck="false" maxlength="1024" placeholder="填写你的 API Key"></label><p id="key-status" class="chat-help">密钥由 Windows 加密保存。</p><button type="button" class="text-button" id="delete-key" hidden>删除已保存的密钥</button></div>
+          <div id="ollama-fields" hidden><label>本机地址<input id="ollama-url" placeholder="http://127.0.0.1:11434"></label><label>聊天模型<input id="ollama-model" list="ollama-models" maxlength="160" placeholder="选择或填写已安装的聊天模型名"></label><datalist id="ollama-models"></datalist><button type="button" class="secondary-button" id="detect-models">检测本机模型</button><p class="chat-help" id="model-help">先运行 Ollama；嵌入模型不能用于聊天。</p></div>
+          <div class="connection-buttons"><button type="submit">保存设置</button><button type="button" id="test-connection" class="secondary-button">测试连接</button></div>
+        </form><p class="chat-help" id="connection-notice">使用 DeepSeek 时，消息、近期对话和固定记忆会发送给 DeepSeek，并按 API 用量计费。</p></section>
+        <section class="chat-card memory-card"><p class="eyebrow">LITTLE THINGS I REMEMBER</p><h2>希望爱音记住的事</h2><label for="memory-notes" class="chat-help">比如你的称呼、喜好和学习计划。每次聊天都会带上这些内容。</label><textarea id="memory-notes" maxlength="2000" rows="5" placeholder="你可以叫我……\n我最近在准备……"></textarea><button id="save-memory">保存长期记忆</button><p class="chat-help">自动保留最近 100 轮对话；请求带入近期记录。重要的事可以固定到这里。</p><details><summary>管理记忆</summary><p class="chat-help">清除记录会移除聊天历史；清除全部也会移除上方固定记忆。</p><button id="clear-history" class="secondary-button">清除聊天记录</button><button id="clear-memory" class="secondary-button">清除全部记忆</button></details></section>
+      </aside>
+    </div>
+  </section>
+  <div class="layout" id="companion-layout">
     <section class="stage" aria-label="爱音的房间">
       <div class="stage-top"><span class="pill">CHIHAYA ANON</span><span id="state-label">待机中</span></div>
       <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="star decor-one">✧</span><span class="star decor-two">✦</span><span class="little-note">♪</span>
@@ -29,5 +48,5 @@
     <label class="toggle"><span>自由散步</span><input type="checkbox" id="roam"><i></i></label><label class="toggle"><span>偶尔碎碎念</span><input type="checkbox" id="chatter"><i></i></label><label class="toggle"><span>轻柔提示音</span><input type="checkbox" id="sound"><i></i></label><label class="toggle"><span>始终在最上层</span><input type="checkbox" id="topmost"><i></i></label><label class="toggle"><span>减少动态效果</span><input type="checkbox" id="reducedMotion"><i></i></label></div>
     <div class="motion-preferences"><label class="toggle"><span>固定位置 · 放下即停</span><input type="checkbox" id="pinned"><i></i></label><label class="toggle"><span>随光标轻轻侧头</span><input type="checkbox" id="trackCursor"><i></i></label><label class="quality-control"><span>动画节奏</span><select id="quality"><option value="balanced">流畅</option><option value="battery">省电</option></select></label></div>
   </section>
-  <footer><span>点击摸头 · 拖动抱起 · 右键更多 · 托盘双击回到这里</span><span>UNOFFICIAL FAN COMPANION <span class="footer-heart">♡</span> v2.0.0</span></footer>
-</main><script src="art.js"></script><script src="room.js"></script></body></html>
+  <footer><span>点击摸头 · 拖动抱起 · 右键更多 · 托盘双击回到这里</span><span>UNOFFICIAL FAN COMPANION <span class="footer-heart">♡</span> v3.0.0</span></footer>
+</main><script src="art.js"></script><script src="room.js"></script><script src="chat-ui.js"></script></body></html>

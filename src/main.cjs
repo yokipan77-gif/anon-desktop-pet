@@ -1,16 +1,21 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, Menu, Tray, screen, nativeImage, Notification, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, Tray, screen, nativeImage, Notification, powerMonitor, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { normalize, constrain, physics, Companion, clamp } = require('./core.cjs');
 const { applyPetBounds } = require('./window-bounds.cjs');
+const { ChatService, ChatError } = require('./chat.cjs');
 const testMode = process.argv.includes('--smoke-test');
-if (testMode) app.setPath('userData', path.join(app.getPath('temp'), 'anon-desktop-pet-test', String(process.pid)));
+if (testMode) {
+  const profile = process.argv.find(arg => arg.startsWith('--smoke-profile='))?.slice('--smoke-profile='.length);
+  app.setPath('userData', path.join(app.getPath('temp'), 'anon-desktop-pet-test', profile && /^[a-z0-9-]{1,80}$/.test(profile) ? profile : String(process.pid)));
+}
 app.setAppUserModelId('io.github.yokipan77.anonpet');
 let pet, room, tray, model, savePath, timer, lastTime, drag, flight, point, lastSent = '', lastSave = 0, hidden = false, suspended = false;
 const PET_BASE_SIZE = 240;
 let ignored = true, size = { width: PET_BASE_SIZE, height: PET_BASE_SIZE };
 let lastPlacement = '', lastBoundsCheck = 0;
+let chat, roomTab = 'companion';
 const single = app.requestSingleInstanceLock();
 if (!single) app.quit();
 else {
@@ -55,18 +60,19 @@ function home() {
 }
 function showPet() { hidden = false; pet?.showInactive(); }
 function syncTopmost() { if (pet && !pet.isDestroyed()) pet.setAlwaysOnTop(model.settings.topmost && !(room && !room.isDestroyed() && room.isFocused()), 'floating'); }
-function openRoom() {
-  if (room && !room.isDestroyed()) { room.show(); room.focus(); return; }
+function openRoom(tab = 'companion') {
+  roomTab = tab === 'chat' ? 'chat' : 'companion';
+  if (room && !room.isDestroyed()) { room.show(); room.focus(); room.webContents.send('anon:tab', roomTab); return; }
   room = new BrowserWindow({ width: 960, height: 760, minWidth: 760, minHeight: 650, title: '爱音的小房间', backgroundColor: '#fbf8fb', autoHideMenuBar: true, icon: path.join(__dirname, '../assets/icon.png'), titleBarStyle: 'hidden', titleBarOverlay: { color: '#fbf8fb', symbolColor: '#3a3548', height: 38 }, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   secure(room); room.loadFile(path.join(__dirname, 'room.html'));
   // Let the control room sit above the companion while it has keyboard focus.
   room.on('focus', syncTopmost);
   room.on('blur', syncTopmost);
-  room.once('ready-to-show', () => room.show()); room.on('closed', () => { room = null; syncTopmost(); });
+  room.once('ready-to-show', () => { room.show(); room.webContents.send('anon:tab', roomTab); }); room.on('closed', () => { room = null; syncTopmost(); });
 }
 function menu() {
   Menu.buildFromTemplate([
-    { label: '爱音的小房间', click: openRoom }, { type: 'separator' },
+    { label: '爱音的小房间', click: () => openRoom() }, { label: '和爱音聊天 · API 与记忆', click: () => openRoom('chat') }, { type: 'separator' },
     { label: '摸摸头 ♡', click: () => model.act('pat') }, { label: '请她吃点心', click: () => model.act('feed') },
     { label: '弹一会儿吉他', click: () => model.act('guitar') },
     { label: '一起摇摆 ♪', click: () => model.act('dance') }, { label: '跳一下！', click: () => model.act('jump') },
@@ -84,6 +90,24 @@ function broadcast(force = false) {
 }
 async function boot() {
   savePath = path.join(app.getPath('userData'), 'companion.json');
+  chat = new ChatService(app.getPath('userData'), { vault: safeStorage, changed: data => { if (room && !room.isDestroyed()) room.webContents.send('anon:chat-update', data); } });
+  const chatHandle = (name, callback) => ipcMain.handle('anon:chat-' + name, async (event, value) => {
+    if (!room || room.isDestroyed() || event.sender !== room.webContents) return { ok: false, error: '请在爱音的小房间中操作。' };
+    try { return { ok: true, data: await callback(value) }; }
+    catch (error) { return { ok: false, error: error instanceof ChatError ? error.message : '操作失败，请稍后重试。' }; }
+  });
+  chatHandle('get', () => chat.snapshot());
+  chatHandle('configure', value => chat.configure(value));
+  chatHandle('test', () => chat.testConnection());
+  chatHandle('models', () => chat.models());
+  chatHandle('notes', value => chat.setNotes(value));
+  chatHandle('clear', value => chat.clear(value));
+  chatHandle('cancel', () => { chat.cancel(); return null; });
+  chatHandle('send', async value => {
+    const result = await chat.send(value);
+    if (!['held','sleep'].includes(model.state)) model.setState('happy', 3000, Date.now());
+    model.say(result.reply.length > 80 ? result.reply.slice(0, 80) + '…' : result.reply, Date.now()); broadcast(true); return result;
+  });
   let saved = {}; try { saved = JSON.parse(fs.readFileSync(savePath, 'utf8')); } catch {}
   model = new Companion(saved); size = { width: Math.round(PET_BASE_SIZE * model.settings.size), height: Math.round(PET_BASE_SIZE * model.settings.size) };
   const a = Number.isFinite(saved.x) && Number.isFinite(saved.y) ? areaAt({ x: saved.x, y: saved.y }) : screen.getPrimaryDisplay().workArea;
@@ -94,8 +118,9 @@ async function boot() {
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '../assets/icon.png')).resize({ width: 24, height: 24 }));
   tray.setToolTip('爱音桌宠 · 双击打开小房间'); tray.on('double-click', () => { showPet(); openRoom(); }); tray.on('right-click', menu); tray.on('click', showPet);
   ipcMain.handle('anon:get', event => trusted(event) ? model.snapshot() : null);
+  ipcMain.handle('anon:tab-get', event => trusted(event) ? roomTab : 'companion');
   channel('anon:action', (_, name) => { model.act(name); broadcast(true); });
-  channel('anon:room', openRoom); channel('anon:home', home); channel('anon:menu', menu); channel('anon:quit', () => app.quit());
+  channel('anon:room', (_, tab) => openRoom(tab)); channel('anon:home', home); channel('anon:menu', menu); channel('anon:quit', () => app.quit());
   channel('anon:hide', () => { hidden = true; pet.hide(); });
   channel('anon:focus', (_, minutes) => { model.focus(minutes); broadcast(true); });
   channel('anon:settings', (_, patch) => {
@@ -170,5 +195,5 @@ function tick() {
     broadcast();
   }
 }
-app.on('before-quit', () => { clearInterval(timer); save(); tray?.destroy(); });
+app.on('before-quit', () => { chat?.cancel(); clearInterval(timer); save(); tray?.destroy(); });
 app.on('window-all-closed', () => {});
