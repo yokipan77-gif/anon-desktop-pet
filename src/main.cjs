@@ -7,7 +7,8 @@ const testMode = process.argv.includes('--smoke-test');
 if (testMode) app.setPath('userData', path.join(app.getPath('temp'), 'anon-desktop-pet-test', String(process.pid)));
 app.setAppUserModelId('io.github.yokipan77.anonpet');
 let pet, room, tray, model, savePath, timer, lastTime, drag, flight, point, lastSent = '', lastSave = 0, hidden = false, suspended = false;
-let ignored = true, size = { width: 340, height: 340 };
+const PET_BASE_SIZE = 240;
+let ignored = true, size = { width: PET_BASE_SIZE, height: PET_BASE_SIZE };
 const single = app.requestSingleInstanceLock();
 if (!single) app.quit();
 else {
@@ -36,23 +37,27 @@ function home() {
   drag = null; flight = null;
   const a = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   point = constrain({ x: a.x + a.width - size.width - 40, y: a.y + a.height - size.height }, a, size);
+  if (model.state === 'held') model.act('drop');
   model.act('wake'); place(); showPet(); save(); broadcast(true);
 }
 function showPet() { hidden = false; pet?.showInactive(); }
+function syncTopmost() { if (pet && !pet.isDestroyed()) pet.setAlwaysOnTop(model.settings.topmost && !(room && !room.isDestroyed() && room.isFocused()), 'floating'); }
 function openRoom() {
   if (room && !room.isDestroyed()) { room.show(); room.focus(); return; }
   room = new BrowserWindow({ width: 960, height: 760, minWidth: 760, minHeight: 650, title: '爱音的小房间', backgroundColor: '#fbf8fb', autoHideMenuBar: true, icon: path.join(__dirname, '../assets/icon.png'), titleBarStyle: 'hidden', titleBarOverlay: { color: '#fbf8fb', symbolColor: '#3a3548', height: 38 }, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   secure(room); room.loadFile(path.join(__dirname, 'room.html'));
   // Let the control room sit above the companion while it has keyboard focus.
-  room.on('focus', () => pet?.setAlwaysOnTop(false));
-  room.on('blur', () => pet?.setAlwaysOnTop(model.settings.topmost, 'floating'));
-  room.once('ready-to-show', () => room.show()); room.on('closed', () => { room = null; pet?.setAlwaysOnTop(model.settings.topmost, 'floating'); });
+  room.on('focus', syncTopmost);
+  room.on('blur', syncTopmost);
+  room.once('ready-to-show', () => room.show()); room.on('closed', () => { room = null; syncTopmost(); });
 }
 function menu() {
   Menu.buildFromTemplate([
     { label: '爱音的小房间', click: openRoom }, { type: 'separator' },
     { label: '摸摸头 ♡', click: () => model.act('pat') }, { label: '请她吃点心', click: () => model.act('feed') },
     { label: '弹一会儿吉他', click: () => model.act('guitar') },
+    { label: '一起摇摆 ♪', click: () => model.act('dance') }, { label: '跳一下！', click: () => model.act('jump') },
+    { label: '伸个懒腰', click: () => model.act('stretch') },
     { label: model.state === 'sleep' ? '叫醒爱音' : '休息一下', click: () => model.act(model.state === 'sleep' ? 'wake' : 'sleep') },
     { label: '回到屏幕角落', click: home }, { label: hidden ? '显示桌宠' : '暂时隐藏', click: () => { if (hidden) showPet(); else { hidden = true; pet.hide(); } } },
     { type: 'separator' }, { label: '退出爱音桌宠', click: () => app.quit() }
@@ -66,12 +71,12 @@ function broadcast(force = false) {
 async function boot() {
   savePath = path.join(app.getPath('userData'), 'companion.json');
   let saved = {}; try { saved = JSON.parse(fs.readFileSync(savePath, 'utf8')); } catch {}
-  model = new Companion(saved); size = { width: Math.round(340 * model.settings.size), height: Math.round(340 * model.settings.size) };
+  model = new Companion(saved); size = { width: Math.round(PET_BASE_SIZE * model.settings.size), height: Math.round(PET_BASE_SIZE * model.settings.size) };
   const a = screen.getPrimaryDisplay().workArea;
   point = constrain({ x: model.settings.x ?? a.x + a.width - size.width - 40, y: model.settings.y ?? a.y + a.height - size.height }, a, size);
-  pet = new BrowserWindow({ ...size, x: Math.round(point.x), y: Math.round(point.y), transparent: true, backgroundColor: '#00000000', frame: false, thickFrame: false, hasShadow: false, resizable: false, maximizable: false, minimizable: false, skipTaskbar: true, alwaysOnTop: model.settings.topmost, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: true } });
+  pet = new BrowserWindow({ ...size, minWidth: 1, minHeight: 1, x: Math.round(point.x), y: Math.round(point.y), transparent: true, backgroundColor: '#00000000', frame: false, thickFrame: false, hasShadow: false, resizable: false, maximizable: false, minimizable: false, skipTaskbar: true, alwaysOnTop: model.settings.topmost, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: true } });
   secure(pet); pet.setIgnoreMouseEvents(true, { forward: true }); pet.setAlwaysOnTop(model.settings.topmost, 'floating');
-  pet.loadFile(path.join(__dirname, 'pet.html')); pet.once('ready-to-show', () => { pet.showInactive(); model.say('初次见面！我是爱音。右键点我，来玩吧 ♪', Date.now()); broadcast(true); });
+  pet.loadFile(path.join(__dirname, 'pet.html')); pet.once('ready-to-show', () => { pet.showInactive(); model.say(saved.savedAt ? '你回来啦！今天，也一起吧 ♪' : '初次见面！我是爱音。右键点我，来玩吧 ♪', Date.now()); broadcast(true); });
   tray = new Tray(nativeImage.createFromPath(path.join(__dirname, '../assets/icon.png')).resize({ width: 24, height: 24 }));
   tray.setToolTip('爱音桌宠 · 双击打开小房间'); tray.on('double-click', () => { showPet(); openRoom(); }); tray.on('right-click', menu); tray.on('click', showPet);
   ipcMain.handle('anon:get', event => trusted(event) ? model.snapshot() : null);
@@ -81,11 +86,17 @@ async function boot() {
   channel('anon:focus', (_, minutes) => { model.focus(minutes); broadcast(true); });
   channel('anon:settings', (_, patch) => {
     if (!patch || typeof patch !== 'object') return;
-    const allowed = {}; for (const key of ['size','roam','chatter','sound','topmost','reducedMotion']) if (Object.hasOwn(patch, key)) allowed[key] = patch[key];
+    const allowed = {}; for (const key of ['size','roam','chatter','sound','topmost','reducedMotion','trackCursor','quality']) if (Object.hasOwn(patch, key)) allowed[key] = patch[key];
     model.settings = normalize({ ...model.settings, ...allowed });
-    pet.setAlwaysOnTop(model.settings.topmost && !room?.isFocused(), 'floating');
-    const next = { width: Math.round(340 * model.settings.size), height: Math.round(340 * model.settings.size) };
-    if (next.width !== size.width) { const bottom = point.y + size.height; size = next; point.y = bottom - size.height; pet.setSize(size.width, size.height); point = constrain(point, areaAt(point), size); place(); }
+    syncTopmost();
+    const next = { width: Math.round(PET_BASE_SIZE * model.settings.size), height: Math.round(PET_BASE_SIZE * model.settings.size) };
+    if (next.width !== size.width) {
+      const bottom = point.y + size.height; size = next; point.y = bottom - size.height;
+      // Windows locks a non-resizable window's minimum to its previous size.
+      pet.setMinimumSize(1, 1); pet.setMaximumSize(0, 0);
+      pet.setSize(size.width, size.height);
+      point = constrain(point, areaAt(point), size); place();
+    }
     if ((!model.settings.roam || model.settings.reducedMotion) && model.state === 'walk') model.setState('idle', 8000, Date.now());
     save(); broadcast(true);
   });
@@ -131,8 +142,14 @@ function tick() {
     }
   }
   if (now - lastSave > 15000) { save(); lastSave = now; }
-  // UI stats refresh at 4 Hz; physical movement stays smooth at 30 Hz.
-  if (Math.floor(now / 250) !== Math.floor((now - dt * 1000) / 250)) broadcast();
+  // Cursor samples stay local; the renderer smooths these low-rate updates.
+  if (Math.floor(now / 125) !== Math.floor((now - dt * 1000) / 125)) {
+    if (!hidden && model.settings.trackCursor && !model.settings.reducedMotion) {
+      const cursor = screen.getCursorScreenPoint();
+      model.gaze = { x: clamp((cursor.x - point.x - size.width * .5) / 400, -1, 1), y: clamp((cursor.y - point.y - size.height * .5) / 400, -1, 1) };
+    } else model.gaze = { x: 0, y: 0 };
+    broadcast();
+  }
 }
 app.on('before-quit', () => { clearInterval(timer); save(); tray?.destroy(); });
 app.on('window-all-closed', () => {});

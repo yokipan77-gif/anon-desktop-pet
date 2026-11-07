@@ -1,15 +1,17 @@
 'use strict';
 const api = window.anon;
 const canvas = document.querySelector('#sprite'), art = new window.AnonArt(canvas), speech = document.querySelector('#speech');
+window.anonArt = art;
 let snapshot, pointer, lastInteractive, lastRevision = -1, audio;
 const dock = document.querySelector('#dock'), more = document.querySelector('#more');
 function update(next) {
   snapshot = next; document.body.dataset.state = next.state; speech.textContent = next.speech;
+  if(next.settings.reducedMotion) document.querySelector('#particles').replaceChildren();
   if (next.revision !== lastRevision) {
     lastRevision = next.revision;
-    if (['happy','guitar'].includes(next.state) && !next.settings.reducedMotion) {
+    if (['happy','feed','guitar','dance','jump'].includes(next.state) && !next.settings.reducedMotion) {
       const container=document.querySelector('#particles'); container.replaceChildren();
-      for(let i=0;i<4;i++){const p=document.createElement('span');p.className='particle';p.textContent=next.state==='guitar'?'♪':next.particles==='snack'?'✧':'♡';container.append(p);}
+      for(let i=0;i<4;i++){const p=document.createElement('span');p.className='particle';p.textContent=['guitar','dance'].includes(next.state)?'♪':next.state==='feed'?'✧':'♡';container.append(p);}
       if(next.state==='guitar'&&next.settings.sound) playNotes();
     }
   }

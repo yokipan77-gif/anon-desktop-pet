@@ -1,5 +1,9 @@
 # Art direction / generation record
 
+## 2.0 animation update
+
+The approved 24-frame atlas is unchanged (Git blob `04bbd3b975dae48decded8b9bf77668471521c76`). All character screenshots use that original image. Version 2.0 adds a 14 × 18 quad mesh for restrained hair/head/body movement and time-based pose easing; jump, dance, and stretch reuse existing frames. It does not introduce a 3D model, new generated artwork, or a Live2D rig. Distinct action frames are not cross-dissolved to avoid ghosted faces and limbs.
+
 Tool: built-in `image_gen` (not the CLI/API fallback). Character illustration generated as an original fan-art atlas, then refined through the same tool for transparent edges. Final asset: `assets/anon-atlas.png`, 1024 × 1536 RGBA; four columns, six rows. The runtime selects cells directly and adds subtle movement. No original wallpaper is included.
 
 ## Generation prompt

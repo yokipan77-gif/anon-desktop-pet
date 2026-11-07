@@ -1,12 +1,13 @@
 'use strict';
 
-const defaults = Object.freeze({ size: 1, roam: true, chatter: true, sound: false, topmost: true, reducedMotion: false, affection: 20, hunger: 75, energy: 90, pats: 0, focusMinutes: 0, savedAt: 0 });
+const defaults = Object.freeze({ size: 1, roam: true, chatter: true, sound: false, topmost: true, reducedMotion: false, trackCursor: true, quality: 'balanced', affection: 20, hunger: 75, energy: 90, pats: 0, focusMinutes: 0, savedAt: 0 });
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 function normalize(input = {}) {
   const out = { ...defaults };
   if (!input || typeof input !== 'object') return out;
-  for (const k of ['roam', 'chatter', 'sound', 'topmost', 'reducedMotion']) if (typeof input[k] === 'boolean') out[k] = input[k];
-  for (const [k, lo, hi] of [['size', .75, 1.35], ['affection', 0, 100], ['hunger', 0, 100], ['energy', 0, 100], ['pats', 0, 1e8], ['focusMinutes', 0, 1e8], ['savedAt', 0, 1e15]]) {
+  for (const k of ['roam', 'chatter', 'sound', 'topmost', 'reducedMotion', 'trackCursor']) if (typeof input[k] === 'boolean') out[k] = input[k];
+  if (['balanced','battery'].includes(input.quality)) out.quality=input.quality;
+  for (const [k, lo, hi] of [['size', .6, 1.35], ['affection', 0, 100], ['hunger', 0, 100], ['energy', 0, 100], ['pats', 0, 1e8], ['focusMinutes', 0, 1e8], ['savedAt', 0, 1e15]]) {
     if (Number.isFinite(input[k])) out[k] = clamp(input[k], lo, hi);
   }
   if (Number.isFinite(input.x) && Number.isFinite(input.y)) { out.x = input.x; out.y = input.y; }
@@ -35,12 +36,15 @@ class Companion {
   say(text, now) { this.speech = text; this.speechUntil = now + 6500; }
   setState(state, duration, now) { this.state = state; this.until = now + duration; this.revision++; }
   act(action, now = Date.now()) {
-    if (!['pat','feed','guitar','sleep','wake','talk','follow','wave','drag','drop'].includes(action)) return false;
+    if (!['pat','feed','guitar','sleep','wake','talk','follow','wave','drag','drop','jump','dance','stretch'].includes(action)) return false;
     if (action === 'drag') { this.setState('held', Infinity, now); this.say('诶——轻一点啦！', now); return true; }
     if (action === 'drop') { this.setState('happy', 1800, now); this.say('安全着陆！刚才不算失误哦。', now); return true; }
+    if (this.state === 'held') return false;
     if (action === 'wake') { this.setState('happy', 2400, now); this.say('我醒着呢！……刚才只是闭目养神。', now); return true; }
     if (action === 'sleep') { this.setState('sleep', Infinity, now); this.say('借你的桌角，稍微休息一下……', now); return true; }
-    if (this.state === 'held') return false;
+    if (action === 'jump') { this.setState('jump', 2400, now); this.say('嘿咻！今天也要打起精神呀！', now); return true; }
+    if (action === 'dance') { this.setState('dance', 12000, now); this.say('一起跟上这个节拍 ♪', now); return true; }
+    if (action === 'stretch') { this.setState('stretch', 5500, now); this.say('伸个懒腰～你也一起吧！', now); return true; }
     const cooled = now - (this.lastAction[action] ?? -Infinity) > (action === 'feed' ? 12000 : 1500);
     this.lastAction[action] = now;
     this.particles = action === 'feed' ? 'snack' : action === 'guitar' ? 'notes' : 'hearts';
@@ -50,7 +54,7 @@ class Companion {
       this.say(this.settings.pats % 3 === 0 ? '头发要乱了啦……不过，再摸一下也行。' : '嘿嘿，今天也有好好努力吧？', now);
     } else if (action === 'feed') {
       if (cooled) { this.settings.hunger = clamp(this.settings.hunger + 18, 0, 100); this.settings.energy = clamp(this.settings.energy + 5, 0, 100); }
-      this.setState('happy', 3600, now); this.say(cooled ? '是给我的？那我就不客气啦 ♪' : '先让我把这一口吃完嘛！', now);
+      this.setState('feed', 4500, now); this.say(cooled ? '是给我的？那我就不客气啦 ♪' : '先让我把这一口吃完嘛！', now);
     } else if (action === 'guitar') {
       this.setState('guitar', 14000, now); this.say('接下来，是爱音的练习时间！', now);
     } else if (action === 'follow') {
@@ -66,7 +70,8 @@ class Companion {
     if (!Number.isFinite(minutes) || minutes < 0 || minutes > 120) return false;
     if (!minutes) { this.focusEnd = 0; this.focusStarted = 0; this.say('暂停一下也没关系。', now); return true; }
     this.focusStarted = now; this.focusEnd = now + minutes * 60000;
-    this.setState('idle', 6000, now); this.say(`一起专心 ${minutes} 分钟，我会安静陪着你。`, now); return true;
+    if (this.state !== 'held') this.setState('idle', 6000, now);
+    this.say(`一起专心 ${minutes} 分钟，我会安静陪着你。`, now); return true;
   }
   tick(now = Date.now()) {
     const elapsed = clamp((now - this.lastTick) / 60000, 0, 2); this.lastTick = now;
@@ -76,7 +81,8 @@ class Companion {
     if (this.focusEnd && now >= this.focusEnd) {
       this.settings.focusMinutes += Math.round((this.focusEnd - this.focusStarted) / 60000);
       this.focusEnd = 0; this.focusStarted = 0; completed = true;
-      this.setState('happy', 5000, now); this.say('辛苦啦！站起来伸个懒腰吧。', now);
+      if (this.state !== 'held') this.setState('happy', 5000, now);
+      this.say('辛苦啦！站起来伸个懒腰吧。', now);
     }
     if (this.state !== 'sleep' && this.state !== 'held' && now > this.until) {
       const roll = this.random();
@@ -92,7 +98,7 @@ class Companion {
     return completed;
   }
   snapshot(now = Date.now()) {
-    return { settings: { ...this.settings }, state: this.state, direction: this.direction, speech: now < this.speechUntil ? this.speech : '', focusEnd: this.focusEnd, particles: this.particles, revision: this.revision };
+    return { settings: { ...this.settings }, state: this.state, direction: this.direction, speech: now < this.speechUntil ? this.speech : '', focusEnd: this.focusEnd, particles: this.particles, revision: this.revision, gaze: this.gaze || {x:0,y:0} };
   }
 }
 module.exports = { defaults, normalize, clamp, constrain, physics, Companion };
